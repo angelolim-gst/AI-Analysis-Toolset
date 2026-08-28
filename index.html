@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Tools</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #2C3E50;
+            --accent: #3498DB;
+            --bg-light: #F4F6F9;
+            --text-dark: #333;
+            --border: #E0E0E0;
+            --success: #27AE60;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+        body { display: flex; height: 100vh; background-color: var(--bg-light); color: var(--text-dark); }
+
+        /* Sidebar */
+        .sidebar { width: 250px; background-color: var(--primary); color: white; padding: 20px; }
+        .sidebar h2 { margin-bottom: 30px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .sidebar ul { list-style: none; }
+        .sidebar ul li { margin-bottom: 15px; }
+        .sidebar ul li a { color: white; text-decoration: none; font-size: 1.1rem; display: block; padding: 10px; border-radius: 5px; transition: 0.3s; }
+        .sidebar ul li a:hover { background-color: rgba(255,255,255,0.1); }
+
+        /* Main Content */
+        .content { flex-grow: 1; padding: 40px; overflow-y: auto; }
+        .view { display: none; }
+        .view.active { display: block; }
+        h1 { margin-bottom: 20px; color: var(--primary); }
+
+        /* Cards & Forms */
+        .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .mt-20 { margin-top: 20px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+
+        label { display: block; margin: 15px 0 5px; font-weight: bold; font-size: 0.9rem; }
+        input[type="text"], input[type="password"], input[type="number"], select, textarea, input[type="file"] {
+            width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 1rem;
+        }
+        
+        button { background-color: var(--accent); color: white; border: none; padding: 10px 20px; font-size: 1rem; border-radius: 5px; cursor: pointer; margin-top: 15px; transition: 0.3s; }
+        button:hover { background-color: #2980B9; }
+        .secondary-btn { background-color: #7F8C8D; }
+        .secondary-btn:hover { background-color: #616A6B; }
+        .success-btn { background-color: var(--success); }
+        .success-btn:hover { background-color: #1E8449; }
+
+        /* Modal */
+        .modal { display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; margin: 10% auto; padding: 30px; border-radius: 8px; width: 50%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: black; }
+        .status-msg { color: green; font-size: 0.85rem; margin-top: 5px; }
+
+        /* Editable AI Output */
+        #rca-output {
+            min-height: 150px;
+            padding: 15px;
+            border: 2px dashed var(--accent);
+            border-radius: 5px;
+            background-color: #fafdff;
+            outline: none;
+            line-height: 1.6;
+        }
+        #rca-output:focus { border: 2px solid var(--accent); background-color: #fff; }
+        #rca-output ul { margin-left: 20px; margin-bottom: 10px; }
+        #rca-output p { margin-bottom: 10px; }
+        #rca-output strong { color: var(--primary); }
+
+        /* History Items */
+        .history-item { border-bottom: 1px solid var(--border); padding: 15px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+        .history-item:last-child { border-bottom: none; }
+        .history-details { width: 85%; }
+        .history-details p { margin-bottom: 5px; }
+        .delete-btn { background-color: #E74C3C; padding: 5px 10px; font-size: 0.9rem; margin-top: 0; }
+        .delete-btn:hover { background-color: #C0392B; }
+        .rendered-history { background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 0.9rem; margin-top: 10px; border-left: 4px solid var(--accent); }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <h2>AI Tools</h2>
+        <ul>
+            <li><a href="#" onclick="showView('home')">Home (Settings)</a></li>
+            <li><a href="#" onclick="showView('rca-tool')">RCA Tool</a></li>
+            <li><a href="#" onclick="showView('history')">History</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="content">
+        
+        <!-- HOME VIEW -->
+        <section id="home-view" class="view active">
+            <h1>Settings</h1>
+            <div class="card">
+                <label for="api-key">Gemini API Key</label>
+                <input type="password" id="api-key" placeholder="Enter your API Key">
+                
+                <label for="model-version">Model Version</label>
+                <select id="model-version">
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                </select>
+                
+                <button onclick="saveSettings()">Save Settings</button>
+            </div>
+        </section>
+
+        <!-- RCA TOOL VIEW -->
+        <section id="rca-tool-view" class="view">
+            <h1>RCA Tool</h1>
+            <button onclick="openModal('rca-settings-modal')" class="secondary-btn">Configure RCA Settings (CSV & Prompt)</button>
+            
+            <div class="card mt-20">
+                <h3>Case Details</h3>
+                <form id="rca-form">
+                    <label>Agent Name:</label> <input type="text" id="rca-agent">
+                    <label>Case Number:</label> <input type="text" id="rca-case">
+                    <label>Case Reason:</label> <input type="text" id="rca-reason">
+                    <label>Verbatim:</label> <textarea id="rca-verbatim" rows="2"></textarea>
+                    
+                    <div class="grid-2">
+                        <div><label>TNPS:</label> <input type="number" id="rca-tnps"></div>
+                        <div><label>CSAT (1-5):</label> <input type="number" id="rca-csat" min="1" max="5"></div>
+                    </div>
+                    
+                    <label>Further Context out of the case:</label> <textarea id="rca-context" rows="2"></textarea>
+                    <label>Notes in the case (Internal):</label> <textarea id="rca-notes" rows="2"></textarea>
+                    <label>Email or Chat transcript:</label> <textarea id="rca-transcript" rows="6"></textarea>
+                    
+                    <button type="button" onclick="generateRCA()">Generate RCA Analysis</button>
+                </form>
+            </div>
+
+            <!-- Editable AI Result Section (Hidden until generated) -->
+            <div id="rca-result-section" class="card mt-20" style="display: none;">
+                <h3>AI Analysis Result (Review & Edit)</h3>
+                <p style="font-size: 0.85rem; color: gray; margin-bottom: 10px;">Click inside the text below to make manual edits before saving.</p>
+                
+                <!-- Content Editable Div for on-the-fly markdown/HTML editing -->
+                <div id="rca-output" contenteditable="true"></div>
+                
+                <button type="button" class="success-btn" onclick="saveEditedResult()">Save Final RCA to History</button>
+                <button type="button" class="secondary-btn" onclick="cancelEdit()">Discard</button>
+            </div>
+        </section>
+
+        <!-- HISTORY VIEW -->
+        <section id="history-view" class="view">
+            <h1>RCA History</h1>
+            <div id="history-container" class="card">
+                <!-- History injected here via JS -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal for RCA Settings -->
+    <div id="rca-settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('rca-settings-modal')">&times;</span>
+            <h2>RCA Tool Settings</h2>
+            
+            <label>Upload Baseline CSV Document</label>
+            <input type="file" id="csv-upload" accept=".csv">
+            <button type="button" onclick="processCSV()" class="secondary-btn">Parse & Save CSV</button>
+            <p id="csv-status" class="status-msg"></p>
+            
+            <label class="mt-20">System Prompt</label>
+            <textarea id="system-prompt" rows="6" placeholder="Enter your instructions for Gemini here..."></textarea>
+            
+            <button onclick="saveRCASettings()">Save RCA Settings</button>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let currentPendingCaseData = null; // Holds form data temporarily while editing AI output
+
+        document.addEventListener("DOMContentLoaded", () => {
+            loadSettings();
+            loadHistory();
+            localforage.getItem('rca-csv-data').then(data => {
+                if (!data) openModal('rca-settings-modal');
+            });
+        });
+
+        // Navigation
+        function showView(viewId) {
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+            document.getElementById(`${viewId}-view`).classList.add('active');
+            if(viewId === 'history') loadHistory();
+        }
+
+        // Modals
+        function openModal(id) { document.getElementById(id).style.display = "block"; }
+        function closeModal(id) { document.getElementById(id).style.display = "none"; }
+
+        // Settings Management
+        function saveSettings() {
+            localforage.setItem('gemini-api-key', document.getElementById('api-key').value);
+            localforage.setItem('gemini-model', document.getElementById('model-version').value);
+            alert('API Settings Saved!');
+        }
+
+        function loadSettings() {
+            localforage.getItem('gemini-api-key').then(val => { if(val) document.getElementById('api-key').value = val; });
+            localforage.getItem('gemini-model').then(val => { if(val) document.getElementById('model-version').value = val; });
+            localforage.getItem('rca-system-prompt').then(val => { if(val) document.getElementById('system-prompt').value = val; });
+        }
+
+        // CSV Parsing
+        function processCSV() {
+            const fileInput = document.getElementById('csv-upload');
+            const statusMsg = document.getElementById('csv-status');
+            
+            if (!fileInput.files.length) {
+                statusMsg.style.color = 'red';
+                statusMsg.innerText = "Please select a file first.";
+                return;
+            }
+
+            Papa.parse(fileInput.files[0], {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    localforage.setItem('rca-csv-data', results.data).then(() => {
+                        statusMsg.style.color = 'green';
+                        statusMsg.innerText = "CSV successfully parsed and saved to local storage!";
+                    });
+                }
+            });
+        }
+
+        function saveRCASettings() {
+            localforage.setItem('rca-system-prompt', document.getElementById('system-prompt').value).then(() => {
+                alert('RCA Settings Saved!');
+                closeModal('rca-settings-modal');
+            });
+        }
+
+        // Generate RCA
+        async function generateRCA() {
+            const apiKey = await localforage.getItem('gemini-api-key');
+            if (!apiKey) {
+                alert("Please set your Gemini API key in the Home view first.");
+                showView('home');
+                return;
+            }
+
+            // Temporarily save form data
+            currentPendingCaseData = {
+                id: Date.now().toString(),
+                date: new Date().toLocaleString(),
+                agent: document.getElementById('rca-agent').value || "N/A",
+                caseNumber: document.getElementById('rca-case').value || "N/A",
+                reason: document.getElementById('rca-reason').value || "N/A"
+            };
+
+            // TODO: Here is where you will implement the actual fetch() call to the Gemini API.
+            // For now, we simulate a Markdown response from the AI.
+            const mockMarkdownResponse = `
+* **Case Number:** ${currentPendingCaseData.caseNumber}
+* **Case Reason:** ${currentPendingCaseData.reason}
+* **Most Impactful Behaviour (Tertiary Driver):** Delay in response
+* **Customer's Concern:** Customer felt the email support took too long.
+* **Justification:** Based on the \`Personal Database - RCA Drivers.csv\`, the agent failed to respond within a timely manner, pushing the customer to leave a poor review.
+
+*(AI Note: Please verify the driver mapping against the CSV context).*
+            `;
+
+            // Parse Markdown to HTML via Marked.js and insert into the editable div
+            const outputDiv = document.getElementById('rca-output');
+            outputDiv.innerHTML = marked.parse(mockMarkdownResponse);
+            
+            // Show the result section
+            document.getElementById('rca-result-section').style.display = 'block';
+            
+            // Scroll to results
+            outputDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Save Edit
+        function saveEditedResult() {
+            if (!currentPendingCaseData) return;
+
+            // Grab the edited HTML content
+            const finalHtmlContent = document.getElementById('rca-output').innerHTML;
+            currentPendingCaseData.finalAnalysisHTML = finalHtmlContent;
+
+            // Save to LocalForage History array
+            localforage.getItem('rca-history').then(history => {
+                const historyArr = history || [];
+                historyArr.unshift(currentPendingCaseData); // Add to top
+                
+                localforage.setItem('rca-history', historyArr).then(() => {
+                    alert('Final RCA Saved to History!');
+                    document.getElementById('rca-form').reset();
+                    document.getElementById('rca-result-section').style.display = 'none';
+                    currentPendingCaseData = null;
+                    showView('history');
+                });
+            });
+        }
+
+        function cancelEdit() {
+            document.getElementById('rca-result-section').style.display = 'none';
+            currentPendingCaseData = null;
+        }
+
+        // History Management
+        function loadHistory() {
+            const container = document.getElementById('history-container');
+            container.innerHTML = '';
+
+            localforage.getItem('rca-history').then(history => {
+                if (!history || history.length === 0) {
+                    container.innerHTML = '<p>No history found.</p>';
+                    return;
+                }
+
+                history.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'history-item';
+                    div.innerHTML = `
+                        <div class="history-details">
+                            <strong>Case: ${item.caseNumber}</strong> - ${item.agent}
+                            <p style="font-size: 0.85em; color: gray;">${item.date}</p>
+                            <p><em>Reason:</em> ${item.reason}</p>
+                            <div class="rendered-history">
+                                ${item.finalAnalysisHTML}
+                            </div>
+                        </div>
+                        <button class="delete-btn" onclick="deleteHistoryItem('${item.id}')">Delete</button>
+                    `;
+                    container.appendChild(div);
+                });
+            });
+        }
+
+        function deleteHistoryItem(id) {
+            if(!confirm("Are you sure you want to delete this entry?")) return;
+
+            localforage.getItem('rca-history').then(history => {
+                const newHistory = history.filter(item => item.id !== id);
+                localforage.setItem('rca-history', newHistory).then(() => loadHistory());
+            });
+        }
+    </script>
+</body>
+</html>
