@@ -53,10 +53,12 @@
         
         button { background-color: var(--accent); color: white; border: none; padding: 10px 20px; font-size: 1rem; border-radius: 5px; cursor: pointer; margin-top: 15px; transition: 0.3s; }
         button:hover { background-color: #2980B9; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
         .secondary-btn { background-color: #7F8C8D; }
         .secondary-btn:hover { background-color: #616A6B; }
         .success-btn { background-color: var(--success); }
         .success-btn:hover { background-color: #1E8449; }
+        .small-btn { padding: 5px 10px; font-size: 0.85rem; margin-top: 5px; }
 
         /* Modal */
         .modal { display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
@@ -146,7 +148,7 @@
                     <label>Notes in the case (Internal):</label> <textarea id="rca-notes" rows="2"></textarea>
                     <label>Email or Chat transcript:</label> <textarea id="rca-transcript" rows="6"></textarea>
                     
-                    <button type="button" onclick="generateRCA()">Generate RCA Analysis</button>
+                    <button type="button" id="generate-btn" onclick="generateRCA()">Generate RCA Analysis</button>
                 </form>
             </div>
 
@@ -184,7 +186,9 @@
             <p id="csv-status" class="status-msg"></p>
             
             <label class="mt-20">System Prompt</label>
-            <textarea id="system-prompt" rows="6" placeholder="Enter your instructions for Gemini here..."></textarea>
+            <textarea id="system-prompt" rows="8" placeholder="Enter your instructions for Gemini here..."></textarea>
+            <button type="button" onclick="resetToDefaultPrompt()" class="secondary-btn small-btn">Reset to Default Prompt</button>
+            <br><br>
             
             <button onclick="saveRCASettings()">Save RCA Settings</button>
         </div>
@@ -194,8 +198,25 @@
     <script>
         let currentPendingCaseData = null;
 
+        // Default Prompt Definition
+        const DEFAULT_PROMPT = `You are a master of Root Cause Analysis.
+Use the attached CSV data as the definitive baseline for mapping criteria and identifying the 'Tertiary Driver'.
+Analyze the provided case details and transcript, then output the RCA exactly in this format.
+
+* **Case Number:** 
+* **Case Reason:** 
+* **TNPS:**
+* **CSAT:**
+* **Verbatim:** 
+* **Most Impactful Behaviour (Tertiary Driver):** [Must exactly match an entry from the CSV]
+* **Customer's Concern:** [Brief summary of the customer's issue]
+* **Resolution provided by the agent:** [What the agent did]
+* **Justification of selected Most Impactful Behavior:** [Explain why this specific driver from the CSV was chosen based on the agent's actions in the transcript]
+
+Do not include any conversational filler before or after the output list. Respond only with the requested structure.`;
+
         document.addEventListener("DOMContentLoaded", () => {
-            showView('home'); // Explicitly default to Home view
+            showView('home');
             loadSettings();
             loadHistory();
         });
@@ -227,7 +248,6 @@
                 const select = document.getElementById('model-version');
                 select.innerHTML = ''; 
 
-                // Filter for models containing 'flash' (case insensitive)
                 const flashModels = data.models.filter(m => 
                     m.name.toLowerCase().includes('flash') || 
                     (m.displayName && m.displayName.toLowerCase().includes('flash'))
@@ -240,7 +260,7 @@
 
                 flashModels.forEach(m => {
                     const opt = document.createElement('option');
-                    opt.value = m.name; // Use the direct model string (e.g., models/gemini-1.5-flash)
+                    opt.value = m.name; 
                     opt.text = m.displayName || m.name;
                     select.appendChild(opt);
                 });
@@ -280,8 +300,16 @@
             });
             
             localforage.getItem('rca-system-prompt').then(val => { 
-                if(val) document.getElementById('system-prompt').value = val; 
+                if(val) {
+                    document.getElementById('system-prompt').value = val; 
+                } else {
+                    document.getElementById('system-prompt').value = DEFAULT_PROMPT;
+                }
             });
+        }
+
+        function resetToDefaultPrompt() {
+            document.getElementById('system-prompt').value = DEFAULT_PROMPT;
         }
 
         // CSV Parsing
@@ -314,37 +342,107 @@
             });
         }
 
-        // Generate RCA
+        // --- ACTUAL GEMINI API INTEGRATION ---
         async function generateRCA() {
             const apiKey = await localforage.getItem('gemini-api-key');
-            if (!apiKey) {
-                alert("Please set your Gemini API key in the Home view first.");
+            const modelObj = await localforage.getItem('gemini-model');
+            const csvData = await localforage.getItem('rca-csv-data');
+            const systemPrompt = await localforage.getItem('rca-system-prompt');
+
+            if (!apiKey || !modelObj || !modelObj.value) {
+                alert("Please set your Gemini API key and select a model in the Home view first.");
                 showView('home');
                 return;
             }
+            if (!csvData) {
+                alert("Please upload and parse your baseline CSV in the RCA Settings.");
+                return;
+            }
+
+            const btn = document.getElementById('generate-btn');
+            btn.disabled = true;
+            btn.innerText = "Analyzing with Gemini...";
+
+            // Gather inputs
+            const agent = document.getElementById('rca-agent').value || "N/A";
+            const caseNumber = document.getElementById('rca-case').value || "N/A";
+            const reason = document.getElementById('rca-reason').value || "N/A";
+            const verbatim = document.getElementById('rca-verbatim').value || "N/A";
+            const tnps = document.getElementById('rca-tnps').value || "N/A";
+            const csat = document.getElementById('rca-csat').value || "N/A";
+            const context = document.getElementById('rca-context').value || "N/A";
+            const notes = document.getElementById('rca-notes').value || "N/A";
+            const transcript = document.getElementById('rca-transcript').value || "N/A";
 
             currentPendingCaseData = {
                 id: Date.now().toString(),
                 date: new Date().toLocaleString(),
-                agent: document.getElementById('rca-agent').value || "N/A",
-                caseNumber: document.getElementById('rca-case').value || "N/A",
-                reason: document.getElementById('rca-reason').value || "N/A"
+                agent: agent,
+                caseNumber: caseNumber,
+                reason: reason
             };
 
-            // TODO: Replace this mock block with an actual fetch() POST to your selected Gemini model endpoint
-            const mockMarkdownResponse = `
-* **Case Number:** ${currentPendingCaseData.caseNumber}
-* **Case Reason:** ${currentPendingCaseData.reason}
-* **Most Impactful Behaviour (Tertiary Driver):** (Awaiting Live API Integration)
-* **Customer's Concern:** AI interpretation goes here.
-* **Justification:** Based on the \`Personal Database - RCA Drivers.csv\`, context applies here.
+            // Build the full prompt for the API
+            const combinedPrompt = `
+${systemPrompt ? "System Instructions:\n" + systemPrompt + "\n\n" : ""}
+Baseline CSV Data (RCA Drivers):
+${JSON.stringify(csvData)}
+
+Please perform a Root Cause Analysis for the following case based on the drivers above:
+Agent Name: ${agent}
+Case Number: ${caseNumber}
+Case Reason: ${reason}
+Verbatim: ${verbatim}
+TNPS: ${tnps}
+CSAT: ${csat}
+Further Context: ${context}
+Internal Notes: ${notes}
+Transcript: 
+${transcript}
             `;
 
-            const outputDiv = document.getElementById('rca-output');
-            outputDiv.innerHTML = marked.parse(mockMarkdownResponse);
-            
-            document.getElementById('rca-result-section').style.display = 'block';
-            outputDiv.scrollIntoView({ behavior: 'smooth' });
+            try {
+                // Construct Endpoint: modelObj.value is usually "models/gemini-1.5-flash"
+                const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelObj.value}:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: combinedPrompt }]
+                        }]
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error?.message || "Failed to generate content.");
+                }
+
+                const data = await response.json();
+                
+                // Extract AI Text Response
+                let aiResult = "";
+                if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+                    aiResult = data.candidates[0].content.parts[0].text;
+                } else {
+                    aiResult = "Error: Unexpected response format from API.";
+                }
+
+                // Render in UI
+                const outputDiv = document.getElementById('rca-output');
+                outputDiv.innerHTML = marked.parse(aiResult);
+                
+                document.getElementById('rca-result-section').style.display = 'block';
+                outputDiv.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (err) {
+                alert("API Error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Generate RCA Analysis";
+            }
         }
 
         // Save Edit
