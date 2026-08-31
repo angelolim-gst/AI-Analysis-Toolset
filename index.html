@@ -213,7 +213,9 @@
 
         const DEFAULT_PROMPT = `You are a master of Root Cause Analysis.
 Use the attached CSV data as the definitive baseline for mapping criteria and identifying the 'Tertiary Driver'.
-Analyze the provided case details and transcript, then output the RCA exactly in this format.
+You MUST holistically evaluate all provided fields. Strictly enforce checking the 'Further Context out of the case' and 'Notes in the case (Internal)' alongside the transcript to accurately diagnose the true root cause.
+
+Analyze the provided case details and output the RCA exactly in this format:
 
 * **Case Number:** 
 * **Case Reason:** 
@@ -223,7 +225,7 @@ Analyze the provided case details and transcript, then output the RCA exactly in
 * **Most Impactful Behaviour (Tertiary Driver):** [Must exactly match an entry from the CSV]
 * **Customer's Concern:** [Brief summary of the customer's issue]
 * **Resolution provided by the agent:** [What the agent did]
-* **Justification of selected Most Impactful Behavior:** [Explain why this specific driver from the CSV was chosen based on the agent's actions in the transcript]
+* **Justification of selected Most Impactful Behavior:** [Explain why this specific driver from the CSV was chosen. You MUST explicitly reference how the 'Further Context' and 'Internal Notes' influenced this decision alongside the agent's actions in the transcript]
 
 Do not include any conversational filler before or after the output list. Respond only with the requested structure.`;
 
